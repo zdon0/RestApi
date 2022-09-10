@@ -96,17 +96,17 @@ func fixMissed() {
 	}
 }
 
-func AreParents(ids map[string]bool) bool {
-	stmt, err := db.Prepare("select exists(select from itema where id=$1)")
+func Validate(parents, offers, categories map[string]bool) bool {
+	stmt, err := db.Prepare("select exists(select from item where (id=$1 and type=$2))")
 	if err != nil {
 		log.Println(err)
 		return false
 	}
-
 	defer stmt.Close()
-	for parent, _ := range ids {
+
+	for parent := range parents {
 		var res bool
-		err = stmt.QueryRow(parent).Scan(&parent)
+		err = stmt.QueryRow(parent, "CATEGORY").Scan(&res)
 		if !res {
 			return false
 		} else if err != nil {
@@ -114,5 +114,28 @@ func AreParents(ids map[string]bool) bool {
 			return false
 		}
 	}
+
+	for offer := range offers {
+		var res bool
+		err = stmt.QueryRow(offer, "CATEGORY").Scan(&res)
+		if res {
+			return false
+		} else if err != nil {
+			log.Println(err)
+			return false
+		}
+	}
+
+	for category := range categories {
+		var res bool
+		err = stmt.QueryRow(category, "OFFER").Scan(&res)
+		if res {
+			return false
+		} else if err != nil {
+			log.Println(err)
+			return false
+		}
+	}
+
 	return true
 }
