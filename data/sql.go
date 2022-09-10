@@ -9,27 +9,29 @@ import (
 
 var db *sql.DB
 
-func Start(user, password string) error {
+func StartPG(user, password string) {
 	var err error
 	db, err = sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@localhost:5432", user, password))
 	if err != nil {
-		return err
+		log.Fatal(err)
 	}
+	fixMissed()
+}
+
+func fixMissed() {
+	var err error
 
 	var enumExist bool
-
 	err = db.QueryRow(
-		`select exists(select 1 from pg_enum 
-                       where (enumlabel='OFFER' or enumlabel='CATEGORY'))`).Scan(&enumExist)
-
+		`select exists(select from pg_enum 
+                       where enumlabel in ('OFFER', 'CATEGORY'))`).Scan(&enumExist)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	if !enumExist {
 		_, err = db.Exec(`create type type as enum ('OFFER', 'CATEGORY')`)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		}
 	}
 
@@ -39,22 +41,25 @@ func Start(user, password string) error {
                  	WHERE schemaname != 'pg_catalog' 
                  		AND schemaname != 'information_schema'`)
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
 	for rows.Next() {
 		var table string
 		err = rows.Scan(&table)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		} else {
 			tables[table] = true
 		}
 	}
 	err = rows.Err()
 	if err != nil {
-		log.Fatal(err.Error())
+		log.Fatal(err)
 	}
-	rows.Close()
+	err = rows.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if !tables["item"] {
 		_, err = db.Exec(
@@ -66,11 +71,11 @@ func Start(user, password string) error {
                      "parentId" uuid,
                      name       varchar not null,
                      price      integer,
-                     type       varchar,
-                     time		timestamp
+                     type       varchar not null,
+                     time		timestamp not null
                  );`)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		}
 	}
 
@@ -82,13 +87,32 @@ func Start(user, password string) error {
 						constraint "historyId"
 							references item (id),
 					"parentId" uuid,
-					price      integer,
-					time timestamp
+					price      integer not null,
+					time timestamp not null
 				);`)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal(err)
 		}
 	}
+}
 
-	return nil
+func AreParents(ids map[string]bool) bool {
+	stmt, err := db.Prepare("select exists(select from itema where id=$1)")
+	if err != nil {
+		log.Println(err)
+		return false
+	}
+
+	defer stmt.Close()
+	for parent, _ := range ids {
+		var res bool
+		err = stmt.QueryRow(parent).Scan(&parent)
+		if !res {
+			return false
+		} else if err != nil {
+			log.Println(err)
+			return false
+		}
+	}
+	return true
 }
