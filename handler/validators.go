@@ -5,6 +5,7 @@ import (
 	"RestApi/schemas"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
+	"github.com/gofrs/uuid"
 )
 
 func InitValidators() {
@@ -14,9 +15,9 @@ func InitValidators() {
 }
 
 var validateParentsTypes validator.Func = func(fl validator.FieldLevel) bool {
-	categories := map[string]bool{}
-	offers := map[string]bool{}
-	parents := map[string]bool{}
+	categories := map[uuid.NullUUID]bool{}
+	offers := map[uuid.NullUUID]bool{}
+	parents := map[uuid.NullUUID]bool{}
 
 	for _, item := range fl.Field().Interface().([]schemas.ImportUnit) {
 		if item.Type == "CATEGORY" {
@@ -27,7 +28,7 @@ var validateParentsTypes validator.Func = func(fl validator.FieldLevel) bool {
 		}
 		parents[item.ParentId] = true
 	}
-	delete(parents, "")
+	delete(parents, uuid.NullUUID{Valid: false})
 
 	for key := range parents {
 		if offers[key] {

@@ -1,15 +1,16 @@
 package schemas
 
 import (
+	"github.com/gofrs/uuid"
 	"time"
 )
 
 type ImportUnit struct {
-	Id       string `json:"id" binding:"required,uuid"`
-	Name     string `json:"name" binding:"required"`
-	ParentId string `json:"parentId" binding:"omitempty,uuid"`
-	Type     string `json:"type" binding:"required,oneof=OFFER CATEGORY"`
-	Price    int    `json:"price" binding:"excluded_unless=Type CATEGORY,required_if=Type OFFER,gte=0"`
+	Id       uuid.NullUUID `json:"id" binding:"required,uuid_rfc4122"`
+	Name     string        `json:"name" binding:"required"`
+	ParentId uuid.NullUUID `json:"parentId" binding:"omitempty,uuid_rfc4122"`
+	Type     string        `json:"type" binding:"required,oneof=OFFER CATEGORY"`
+	Price    int           `json:"price" binding:"excluded_unless=Type CATEGORY,required_if=Type OFFER,gte=0"`
 }
 
 type ImportRequest struct {
@@ -18,7 +19,7 @@ type ImportRequest struct {
 }
 
 type DeleteRequest struct {
-	Id string `uri:"id" binding:"required,uuid"`
+	Id string `uri:"id" binding:"required,uuid_rfc4122"`
 }
 
 var NotFound = map[string]any{"code": 404, "message": "Item not found"}

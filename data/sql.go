@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/gofrs/uuid"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
 )
@@ -103,7 +104,7 @@ func fixMissed() {
 	}
 }
 
-func ValidateImport(parents, offers, categories map[string]bool) bool {
+func ValidateImport(parents, offers, categories map[uuid.NullUUID]bool) bool {
 	stmt, err := db.Prepare("select exists(select from item where (id=$1 and type=$2))")
 	if err != nil {
 		log.Println(err)
@@ -177,22 +178,15 @@ func Import(request *schemas.ImportRequest) error {
 
 	for _, item := range request.Items {
 		var price sql.NullInt64
-		var parentId sql.NullString
-
 		id := item.Id
 		name := item.Name
 		Type := item.Type
+		parentId := item.ParentId
 
 		if Type == categoryStr {
 			price = sql.NullInt64{}
 		} else {
 			price = sql.NullInt64{int64(item.Price), true}
-		}
-
-		if len(item.ParentId) == 0 {
-			parentId = sql.NullString{}
-		} else {
-			parentId = sql.NullString{item.ParentId, true}
 		}
 
 		if _, err = stmtItem.Exec(id, parentId, name, price, Type, request.UpdateDate); err != nil {
@@ -211,12 +205,8 @@ func Import(request *schemas.ImportRequest) error {
 }
 
 func Delete(id string) error {
-	var exist bool
 
-	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
-		return err
-	}
-	if !exist {
+	if !IsExist(id) {
 		return errors.New("not found")
 	}
 
@@ -234,7 +224,7 @@ func Delete(id string) error {
 
 	queue := list.New()
 	queue.PushBack(id)
-	deleteArray := make([]any, 0, 10)
+	deleteArray := make([]any, 0, 20)
 
 	for queue.Len() > 0 {
 		idDel := queue.Remove(queue.Front()).(string)
@@ -266,4 +256,13 @@ func Delete(id string) error {
 
 	stmtFind.Close()
 	return tx.Commit()
+}
+
+func IsExist(id string) bool {
+	var exist bool
+
+	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
+		return exist
+	}
+	return false
 }
