@@ -24,23 +24,23 @@ func importRequest(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(json); err != nil {
 		log.Println(err)
-		c.JSON(http.StatusBadRequest,
-			gin.H{"code": http.StatusBadRequest, "message": "Validation failed"})
+		c.JSON(http.StatusBadRequest, schemas.BadRequest)
 	} else if err = data.Import(json); err != nil {
-		c.JSON(http.StatusInternalServerError,
-			gin.H{"code": http.StatusInternalServerError, "message": "Internal server error"})
-	} else {
-		c.Status(http.StatusOK)
+		c.Status(http.StatusInternalServerError)
 	}
 }
 
 func deleteRequest(c *gin.Context) {
 	var uri schemas.DeleteRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
-		c.Status(http.StatusConflict)
+		c.JSON(http.StatusBadRequest, schemas.BadRequest)
 	}
 	if err := data.Delete(uri.Id); err != nil {
-		log.Println(err)
-		c.Status(http.StatusConflict)
+		if err.Error() == "not found" {
+			c.JSON(http.StatusNotFound, schemas.NotFound)
+		} else {
+			log.Println(err)
+			c.Status(http.StatusInternalServerError)
+		}
 	}
 }

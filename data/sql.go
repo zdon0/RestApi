@@ -92,7 +92,10 @@ func fixMissed() {
 		_, err = db.Exec(
 			`create table history
 				(
-					id         uuid not null,
+					id         uuid not null
+						constraint "historyId"
+            			references item (id)
+            			on delete cascade,
 					"parentId" uuid,
 					name varchar not null,
 					price      integer,
@@ -221,7 +224,7 @@ func Delete(id_ string) error {
 		return err
 	}
 	if !exist {
-		return errors.New("did not found")
+		return errors.New("not found")
 	}
 
 	tx, err := db.Begin()
@@ -236,13 +239,13 @@ func Delete(id_ string) error {
 		return err
 	}
 
-	stmtDelItem, err := db.Prepare(`delete from item where ("parentId" = $1 or id = $1)`)
+	stmtDel, err := db.Prepare(`delete from item where ("parentId" = $1 or id = $1)`)
 	if err != nil {
 		return err
 	}
 
 	closeStatements := func() {
-		stmtDelItem.Close()
+		stmtDel.Close()
 		stmtFind.Close()
 	}
 
@@ -267,7 +270,7 @@ func Delete(id_ string) error {
 		}
 		rows.Close()
 
-		if _, err = stmtDelItem.Exec(idDel); err != nil {
+		if _, err = stmtDel.Exec(idDel); err != nil {
 			closeStatements()
 			return err
 		}

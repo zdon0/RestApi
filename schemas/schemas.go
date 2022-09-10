@@ -20,3 +20,6 @@ type ImportRequest struct {
 type DeleteRequest struct {
 	Id string `uri:"id" binding:"required,uuid"`
 }
+
+var NotFound = map[string]any{"code": 404, "message": "Item not found"}
+var BadRequest = map[string]any{"code": 400, "message": "Validation failed"}
