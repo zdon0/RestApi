@@ -61,14 +61,11 @@ func fixMissed() {
 			tables[table] = true
 		}
 	}
-	err = rows.Err()
-	if err != nil {
+
+	if err = rows.Err(); err != nil {
 		log.Fatal(err)
 	}
-	err = rows.Close()
-	if err != nil {
-		log.Fatal(err)
-	}
+	rows.Close()
 
 	if !tables["item"] {
 		_, err = db.Exec(
@@ -254,6 +251,7 @@ func Delete(id_ string) error {
 
 	for queue.Len() > 0 {
 		idDel := queue.Remove(queue.Front()).(*pgtype.UUID)
+
 		rows, err := stmtFind.Query(idDel)
 		if err != nil {
 			closeStatements()
@@ -263,7 +261,6 @@ func Delete(id_ string) error {
 			rows.Scan(&id)
 			queue.PushBack(id)
 		}
-
 		if err = rows.Err(); err != nil {
 			closeStatements()
 			return err
