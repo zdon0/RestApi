@@ -1,10 +1,16 @@
 package data
 
 import (
+	"RestApi/schemas"
 	"database/sql"
 	"fmt"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
+)
+
+const (
+	categoryStr = "CATEGORY"
+	offerStr    = "OFFER"
 )
 
 var db *sql.DB
@@ -66,7 +72,7 @@ func fixMissed() {
 			`create table item
                  (
                      id         uuid    not null
-                         constraint id
+                         constraint "itemId"
                              primary key,
                      "parentId" uuid,
                      name       varchar not null,
@@ -87,7 +93,8 @@ func fixMissed() {
 						constraint "historyId"
 							references item (id),
 					"parentId" uuid,
-					price      integer not null,
+					name varchar not null,
+					price      integer,
 					time timestamp not null
 				);`)
 		if err != nil {
@@ -96,7 +103,7 @@ func fixMissed() {
 	}
 }
 
-func Validate(parents, offers, categories map[string]bool) bool {
+func ValidateImport(parents, offers, categories map[string]bool) bool {
 	stmt, err := db.Prepare("select exists(select from item where (id=$1 and type=$2))")
 	if err != nil {
 		log.Println(err)
@@ -138,4 +145,68 @@ func Validate(parents, offers, categories map[string]bool) bool {
 	}
 
 	return true
+}
+
+func Import(request schemas.ImportRequest) error {
+	tx, err := db.Begin()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	defer tx.Rollback()
+
+	stmtItem, err := tx.Prepare(
+		`insert into item values($1, $2, $3, $4, $5, $6)
+					on conflict (id) do update set 
+					"parentId"=$2, "name"=$3, "price"=$4, "time"=$6;`)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	stmtHistory, err := tx.Prepare(`insert into history 
+									values($1, $2, $3, $4, $5)`)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	closeStatements := func() {
+		stmtItem.Close()
+		stmtHistory.Close()
+	}
+
+	for _, item := range request.Items {
+		var price sql.NullInt64
+		var parentId sql.NullString
+
+		id := item.Id
+		name := item.Name
+		Type := item.Type
+
+		if Type == categoryStr {
+			price = sql.NullInt64{}
+		} else {
+			price = sql.NullInt64{int64(item.Price), true}
+		}
+
+		if len(item.ParentId) == 0 {
+			parentId = sql.NullString{}
+		} else {
+			parentId = sql.NullString{item.ParentId, true}
+		}
+
+		if _, err = stmtItem.Exec(id, parentId, name, price, Type, request.UpdateDate); err != nil {
+			log.Println(err)
+			closeStatements()
+			return err
+		}
+		if _, err = stmtHistory.Exec(id, parentId, name, price, request.UpdateDate); err != nil {
+			log.Println(err)
+			closeStatements()
+			return err
+		}
+	}
+	closeStatements()
+	return tx.Commit()
 }
