@@ -8,10 +8,21 @@ import (
 	"net/http"
 )
 
-func imports(c *gin.Context) {
-	var json schemas.ImportRequest
+func StartServer() {
+	gin.DisableConsoleColor()
+	InitValidators()
 
-	if err := c.ShouldBindJSON(&json); err != nil {
+	r := gin.Default()
+	r.POST("/imports", importRequest)
+	r.DELETE("/delete/:id", deleteRequest)
+	err := r.Run(":8080")
+	log.Fatal(err.Error())
+}
+
+func importRequest(c *gin.Context) {
+	json := &schemas.ImportRequest{}
+
+	if err := c.ShouldBindJSON(json); err != nil {
 		log.Println(err)
 		c.JSON(http.StatusBadRequest,
 			gin.H{"code": http.StatusBadRequest, "message": "Validation failed"})
@@ -23,12 +34,13 @@ func imports(c *gin.Context) {
 	}
 }
 
-func StartServer() {
-	gin.DisableConsoleColor()
-	InitValidators()
-
-	r := gin.Default()
-	r.GET("/imports", imports)
-	err := r.Run(":8080")
-	log.Fatal(err.Error())
+func deleteRequest(c *gin.Context) {
+	var uri schemas.DeleteRequest
+	if err := c.ShouldBindUri(&uri); err != nil {
+		c.Status(http.StatusConflict)
+	}
+	if err := data.Delete(uri.Id); err != nil {
+		log.Println(err)
+		c.Status(http.StatusConflict)
+	}
 }

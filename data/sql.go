@@ -2,8 +2,11 @@ package data
 
 import (
 	"RestApi/schemas"
+	"container/list"
 	"database/sql"
+	"errors"
 	"fmt"
+	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
 )
@@ -89,9 +92,7 @@ func fixMissed() {
 		_, err = db.Exec(
 			`create table history
 				(
-					id         uuid not null
-						constraint "historyId"
-							references item (id),
+					id         uuid not null,
 					"parentId" uuid,
 					name varchar not null,
 					price      integer,
@@ -147,7 +148,7 @@ func ValidateImport(parents, offers, categories map[string]bool) bool {
 	return true
 }
 
-func Import(request schemas.ImportRequest) error {
+func Import(request *schemas.ImportRequest) error {
 	tx, err := db.Begin()
 	if err != nil {
 		log.Println(err)
@@ -208,5 +209,69 @@ func Import(request schemas.ImportRequest) error {
 		}
 	}
 	closeStatements()
+	return tx.Commit()
+}
+
+func Delete(id_ string) error {
+	var exist bool
+	id := new(pgtype.UUID)
+	id.Set(id_)
+	err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist)
+	if err != nil {
+		return err
+	}
+	if !exist {
+		return errors.New("did not found")
+	}
+
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+
+	defer tx.Rollback()
+
+	stmtFind, err := db.Prepare(`select id from item where (type='CATEGORY' and "parentId"=$1)`)
+	if err != nil {
+		return err
+	}
+
+	stmtDelItem, err := db.Prepare(`delete from item where ("parentId" = $1 or id = $1)`)
+	if err != nil {
+		return err
+	}
+
+	closeStatements := func() {
+		stmtDelItem.Close()
+		stmtFind.Close()
+	}
+
+	queue := list.New()
+	queue.PushBack(id)
+
+	for queue.Len() > 0 {
+		idDel := queue.Remove(queue.Front()).(*pgtype.UUID)
+		rows, err := stmtFind.Query(idDel)
+		if err != nil {
+			closeStatements()
+			return err
+		}
+		for rows.Next() {
+			rows.Scan(&id)
+			queue.PushBack(id)
+		}
+
+		if err = rows.Err(); err != nil {
+			closeStatements()
+			return err
+		}
+		rows.Close()
+
+		if _, err = stmtDelItem.Exec(idDel); err != nil {
+			closeStatements()
+			return err
+		}
+	}
+
 	return tx.Commit()
 }
