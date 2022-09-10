@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
 )
@@ -165,8 +164,7 @@ func Import(request *schemas.ImportRequest) error {
 		return err
 	}
 
-	stmtHistory, err := tx.Prepare(`insert into history 
-									values($1, $2, $3, $4, $5)`)
+	stmtHistory, err := tx.Prepare(`insert into history values($1, $2, $3, $4, $5)`)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -212,12 +210,10 @@ func Import(request *schemas.ImportRequest) error {
 	return tx.Commit()
 }
 
-func Delete(id_ string) error {
+func Delete(id string) error {
 	var exist bool
-	id := new(pgtype.UUID)
-	id.Set(id_)
-	err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist)
-	if err != nil {
+
+	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
 		return err
 	}
 	if !exist {
@@ -236,42 +232,38 @@ func Delete(id_ string) error {
 		return err
 	}
 
-	stmtDel, err := db.Prepare(`delete from item where ("parentId" = $1 or id = $1)`)
-	if err != nil {
-		return err
-	}
-
-	closeStatements := func() {
-		stmtDel.Close()
-		stmtFind.Close()
-	}
-
 	queue := list.New()
 	queue.PushBack(id)
+	deleteArray := make([]any, 0, 10)
 
 	for queue.Len() > 0 {
-		idDel := queue.Remove(queue.Front()).(*pgtype.UUID)
+		idDel := queue.Remove(queue.Front()).(string)
+		deleteArray = append(deleteArray, idDel)
 
 		rows, err := stmtFind.Query(idDel)
 		if err != nil {
-			closeStatements()
+			stmtFind.Close()
 			return err
 		}
 		for rows.Next() {
 			rows.Scan(&id)
 			queue.PushBack(id)
+			deleteArray = append(deleteArray, id)
 		}
 		if err = rows.Err(); err != nil {
-			closeStatements()
+			stmtFind.Close()
 			return err
 		}
 		rows.Close()
-
-		if _, err = stmtDel.Exec(idDel); err != nil {
-			closeStatements()
-			return err
-		}
 	}
 
+	if _, err = db.Exec(
+		`delete from item where (id in ($1) or "parentId" in ($1))`, deleteArray...); err != nil {
+
+		stmtFind.Close()
+		return err
+	}
+
+	stmtFind.Close()
 	return tx.Commit()
 }
