@@ -14,8 +14,12 @@ type ImportUnit struct {
 }
 
 type ImportRequest struct {
-	Items      []ImportUnit `json:"items" binding:"required,unique=Id,validimport,dive,required"`
+	Items      []ImportUnit `json:"items" binding:"required,unique=Id,validImport,dive,required"`
 	UpdateDate time.Time    `json:"updateDate" time_format:"2006-01-02T03:04:05.000Z" binding:"required"`
+}
+
+type SalesRequest struct {
+	Date time.Time `json:"date" form:"date" time_format:"2006-01-02T03:04:05.000Z" binding:"required,validDate"`
 }
 
 type IdRequest struct {

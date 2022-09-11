@@ -35,14 +35,16 @@ type nodeItem struct {
 func (n *nodeItem) treeToMap() map[string]any {
 	res := map[string]any{}
 	res["id"] = n.id
+	res["name"] = n.name
+	res["type"] = n.Type
+	res["date"] = n.date.Format("2006-01-02T15:04:05.000Z")
+
 	if n.parentId.Valid {
 		res["parentId"] = n.parentId.String
 	} else {
 		res["parentId"] = nil
 	}
-	res["name"] = n.name
-	res["type"] = n.Type
-	res["date"] = n.date.Format("2006-01-02T15:04:05.000Z")
+
 	if res["type"] == "OFFER" {
 		res["price"] = n.price.Int64
 		res["children"] = nil
@@ -202,16 +204,14 @@ func fixMissed() {
 		}
 	}
 
-	if !tables["history"] {
+	if !tables["price_history"] {
 		_, err = db.Exec(
-			`create table history
+			`create table price_history
 				(
 					id         uuid not null
 						constraint "historyId"
             			references item (id)
             			on delete cascade,
-					"parentId" uuid,
-					name varchar not null,
 					price      integer,
 					time timestamp not null
 				);`)
@@ -291,7 +291,10 @@ func Import(request *schemas.ImportRequest) error {
 		return err
 	}
 
-	stmtHistory, err := tx.Prepare(`insert into history values($1, $2, $3, $4, $5)`)
+	stmtHistory, err := tx.Prepare(
+		`insert into price_history select $1, $2, $3 
+					where not exists(select from price_history
+						where (id=$1 and price=$2) order by time desc limit 1)`)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -328,7 +331,7 @@ func Import(request *schemas.ImportRequest) error {
 		}
 
 		if Type == "OFFER" {
-			if _, err = stmtHistory.Exec(id, parentId, name, price, request.UpdateDate); err != nil {
+			if _, err = stmtHistory.Exec(id, price, request.UpdateDate); err != nil {
 				log.Println(err)
 				closeStatements()
 				return err
@@ -488,5 +491,50 @@ func Nodes(id string) (map[string]any, error) {
 	}
 
 	response = head.treeToMap()
+	return response, nil
+}
+
+func Sales(target time.Time) (map[string][]map[string]any, error) {
+	response := map[string][]map[string]any{"items": {}}
+	dayAgo := target.Add(-24 * time.Hour)
+	rows, err := db.Query(`select distinct i.* from item i 
+    								join price_history p on i.id = p.id 
+                    					where (p.time >= $1 and p.time <= $2)`,
+		dayAgo, target)
+
+	if err != nil {
+		return map[string][]map[string]any{}, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+
+		item := map[string]any{}
+		var id, name, Type string
+		var price int
+		var parentId sql.NullString
+		var date time.Time
+
+		if err = rows.Scan(&id, &parentId, &name, &price, &Type, &date); err != nil {
+			return map[string][]map[string]any{}, err
+		}
+
+		item["id"] = id
+		item["name"] = name
+		item["price"] = price
+		item["type"] = Type
+		item["date"] = date.Format("2006-01-02T15:04:05.000Z")
+		if parentId.Valid {
+			item["parentId"] = parentId.String
+		} else {
+			item["parentId"] = nil
+		}
+
+		response["items"] = append(response["items"], item)
+	}
+
+	if rows.Err() != nil {
+		return map[string][]map[string]any{}, err
+	}
 	return response, nil
 }

@@ -19,6 +19,7 @@ func StartServer(port string) {
 	r.POST("/imports", importRequest)
 	r.DELETE("/delete/:id", deleteRequest)
 	r.GET("/nodes/:id", nodesRequest)
+	r.GET("/sales", salesRequest)
 	if err := endless.ListenAndServe(":"+port, r); err != nil {
 		log.Println(err)
 	}
@@ -78,6 +79,19 @@ func nodesRequest(c *gin.Context) {
 			c.Status(http.StatusInternalServerError)
 		}
 
+	} else {
+		c.JSON(http.StatusOK, res)
+	}
+}
+
+func salesRequest(c *gin.Context) {
+	var date schemas.SalesRequest
+
+	if err := c.ShouldBind(&date); err != nil {
+		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+	} else if res, err := data.Sales(date.Date); err != nil {
+		log.Println(err)
+		c.Status(http.StatusInternalServerError)
 	} else {
 		c.JSON(http.StatusOK, res)
 	}

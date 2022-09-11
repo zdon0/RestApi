@@ -6,15 +6,17 @@ import (
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofrs/uuid"
+	"time"
 )
 
 func InitValidators() {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
-		v.RegisterValidation("validimport", validateParentsTypes)
+		v.RegisterValidation("validImport", validateParentsTypes)
+		v.RegisterValidation("validDate", validateDate)
 	}
 }
 
-var validateParentsTypes validator.Func = func(fl validator.FieldLevel) bool {
+func validateParentsTypes(fl validator.FieldLevel) bool {
 	categories := map[uuid.NullUUID]bool{}
 	offers := map[uuid.NullUUID]bool{}
 	parents := map[uuid.NullUUID]bool{}
@@ -38,4 +40,9 @@ var validateParentsTypes validator.Func = func(fl validator.FieldLevel) bool {
 		}
 	}
 	return data.ValidateImport(parents, offers, categories)
+}
+
+func validateDate(fl validator.FieldLevel) bool {
+	date := fl.Field().Interface().(time.Time)
+	return time.Now().After(date)
 }
