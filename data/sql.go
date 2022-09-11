@@ -160,7 +160,7 @@ func Import(request *schemas.ImportRequest) error {
 	stmtItem, err := tx.Prepare(
 		`insert into item values($1, $2, $3, $4, $5, $6)
 					on conflict (id) do update set 
-					"parentId"=$2, "name"=$3, "price"=$4, "time"=$6;`)
+					"parentId"=$2, name=$3, price=$4, time=$6;`)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -177,12 +177,18 @@ func Import(request *schemas.ImportRequest) error {
 		stmtHistory.Close()
 	}
 
+	parents := map[string]bool{}
+
 	for _, item := range request.Items {
 		var price sql.NullInt64
 		id := item.Id
 		name := item.Name
 		Type := item.Type
 		parentId := item.ParentId
+
+		if parentId.Valid {
+			parents[parentId.UUID.String()] = true
+		}
 
 		if Type == categoryStr {
 			price = sql.NullInt64{}
@@ -202,6 +208,60 @@ func Import(request *schemas.ImportRequest) error {
 		}
 	}
 	closeStatements()
+
+	stmtFindParent, err := tx.Prepare(`select "parentId" from item where id=$1`)
+
+	if err != nil {
+		return err
+	}
+
+	queue := list.New()
+	updateArray := make([]any, 0, len(parents))
+	for parent := range parents {
+		queue.PushBack(parent)
+		updateArray = append(updateArray, parent)
+	}
+
+	for queue.Len() > 0 {
+		parent := queue.Remove(queue.Front())
+
+		rows, err := stmtFindParent.Query(parent)
+		if err != nil {
+			stmtFindParent.Close()
+			return err
+		}
+
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			if len(id) > 0 && !parents[id] {
+				queue.PushBack(id)
+				updateArray = append(updateArray, id)
+				parents[id] = true
+			}
+		}
+
+		if rows.Err() != nil {
+			stmtFindParent.Close()
+			return rows.Err()
+		}
+
+		rows.Close()
+	}
+
+	if len(updateArray) > 0 {
+		placeHolders := generatePlaceHolders(len(updateArray), 1)
+		queryArgs := []any{request.UpdateDate}
+		queryArgs = append(queryArgs, updateArray...)
+
+		query := fmt.Sprintf(`update item set time=$1 where id in (%s)`, placeHolders)
+
+		if _, err = db.Exec(query, queryArgs...); err != nil {
+			stmtFindParent.Close()
+			return err
+		}
+	}
+	stmtFindParent.Close()
 	return tx.Commit()
 }
 
@@ -247,12 +307,7 @@ func Delete(id string) error {
 		rows.Close()
 	}
 
-	holdersArray := make([]string, len(deleteArray))
-	for i := 1; i <= len(holdersArray); i++ {
-		holdersArray[i-1] = fmt.Sprintf("$%d", i)
-	}
-
-	placeHolders := strings.Join(holdersArray, ",")
+	placeHolders := generatePlaceHolders(len(deleteArray), 0)
 
 	query := fmt.Sprintf(`delete from item where (id in (%s) or "parentId" in (%s))`,
 		placeHolders, placeHolders)
@@ -264,6 +319,14 @@ func Delete(id string) error {
 
 	stmtFind.Close()
 	return tx.Commit()
+}
+
+func generatePlaceHolders(size, start int) string {
+	holdersArray := make([]string, size)
+	for i := 1; i <= size; i++ {
+		holdersArray[i-1] = fmt.Sprintf("$%d", i+start)
+	}
+	return strings.Join(holdersArray, ",")
 }
 
 type nodeItem struct {
