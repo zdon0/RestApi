@@ -24,10 +24,14 @@ func importRequest(c *gin.Context) {
 	json := &schemas.ImportRequest{}
 
 	if err := c.ShouldBindJSON(json); err != nil {
+
 		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+
 	} else if err = data.Import(json); err != nil {
+
 		log.Println(err)
 		c.Status(http.StatusInternalServerError)
+
 	}
 }
 
@@ -59,14 +63,17 @@ func nodesRequest(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, schemas.BadRequest)
 
 	} else if res, err := data.Nodes(uri.Id); err != nil {
+
 		if err.Error() == "not found" {
 
 			c.JSON(http.StatusNotFound, schemas.NotFound)
 
 		} else {
-
-			c.JSON(http.StatusOK, res)
-
+			log.Println(err)
+			c.Status(http.StatusInternalServerError)
 		}
+
+	} else {
+		c.JSON(http.StatusOK, res)
 	}
 }

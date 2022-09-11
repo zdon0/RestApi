@@ -10,6 +10,7 @@ import (
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
 	"strings"
+	"time"
 )
 
 const (
@@ -201,10 +202,13 @@ func Import(request *schemas.ImportRequest) error {
 			closeStatements()
 			return err
 		}
-		if _, err = stmtHistory.Exec(id, parentId, name, price, request.UpdateDate); err != nil {
-			log.Println(err)
-			closeStatements()
-			return err
+
+		if Type == "OFFER" {
+			if _, err = stmtHistory.Exec(id, parentId, name, price, request.UpdateDate); err != nil {
+				log.Println(err)
+				closeStatements()
+				return err
+			}
 		}
 	}
 	closeStatements()
@@ -256,7 +260,7 @@ func Import(request *schemas.ImportRequest) error {
 
 		query := fmt.Sprintf(`update item set time=$1 where id in (%s)`, placeHolders)
 
-		if _, err = db.Exec(query, queryArgs...); err != nil {
+		if _, err = tx.Exec(query, queryArgs...); err != nil {
 			stmtFindParent.Close()
 			return err
 		}
@@ -335,38 +339,147 @@ type nodeItem struct {
 	name     string
 	price    sql.NullInt64
 	Type     string
+	date     time.Time
 
-	sum      int
-	len      int
+	sum      int64
+	len      int64
 	parent   *nodeItem
 	children []*nodeItem
 }
 
-func Nodes(id string) (map[any]any, error) {
-	res := map[any]any{}
-	stmtItem, err := db.Prepare(`select id, "parentId", name, price, type from item where id=$1`)
+func (head *nodeItem) treeToMap() map[string]any {
+	res := map[string]any{}
+	res["id"] = head.id
+	if head.parentId.Valid {
+		res["parentId"] = head.parentId.String
+	} else {
+		res["parentId"] = nil
+	}
+	res["name"] = head.name
+	res["type"] = head.Type
+	res["date"] = head.date.Format("2006-01-02T15:04:05.000Z")
+	if res["type"] == "OFFER" {
+		res["price"] = head.price.Int64
+		res["children"] = nil
+	} else if res["type"] == "CATEGORY" {
+		if head.len != 0 {
+			res["price"] = head.sum / head.len
+		} else {
+			res["price"] = 0
+		}
+		children := make([]map[string]any, len(head.children))
+		for i, child := range head.children {
+			children[i] = child.treeToMap()
+		}
+		res["children"] = children
+	}
+	return res
+}
+
+func (parent *nodeItem) fill(stmtChildren, stmtItem *sql.Stmt) error {
+	childrenOffer, err := stmtChildren.Query(parent.id, "OFFER")
 	if err != nil {
-		return res, err
+		return err
+	}
+	defer childrenOffer.Close()
+
+	var total, sum int64
+
+	for childrenOffer.Next() {
+
+		newChildren := &nodeItem{parent: parent}
+
+		var childrenId string
+		if err = childrenOffer.Scan(&childrenId); err != nil {
+			return err
+		}
+
+		if err = stmtItem.QueryRow(childrenId).Scan(&newChildren.id, &newChildren.parentId,
+			&newChildren.name, &newChildren.price, &newChildren.Type, &newChildren.date); err != nil {
+			return err
+		}
+
+		total++
+		sum += newChildren.price.Int64
+		parent.children = append(parent.children, newChildren)
+	}
+
+	if childrenOffer.Err() != nil {
+		return childrenOffer.Err()
+	}
+
+	increasePriceParent := parent
+
+	for increasePriceParent != nil {
+		increasePriceParent.len += total
+		increasePriceParent.sum += sum
+		increasePriceParent = increasePriceParent.parent
+	}
+
+	childrenCategory, err := stmtChildren.Query(parent.id, "CATEGORY")
+	if err != nil {
+		return err
+	}
+	defer childrenCategory.Close()
+
+	for childrenCategory.Next() {
+		newChildren := &nodeItem{parent: parent}
+
+		var childrenId string
+		if err = childrenCategory.Scan(&childrenId); err != nil {
+			return err
+		}
+
+		if err = stmtItem.QueryRow(childrenId).Scan(&newChildren.id, &newChildren.parentId,
+			&newChildren.name, &newChildren.price, &newChildren.Type, &newChildren.date); err != nil {
+			return err
+		}
+
+		if err = newChildren.fill(stmtChildren, stmtItem); err != nil {
+			return err
+		}
+		parent.children = append(parent.children, newChildren)
+	}
+
+	if childrenCategory.Err() != nil {
+		return childrenCategory.Err()
+	}
+
+	return nil
+}
+
+func Nodes(id string) (map[string]any, error) {
+	response := map[string]any{}
+
+	if !IsExist(id) {
+		return response, errors.New("not found")
+	}
+
+	stmtItem, err := db.Prepare(`select id, "parentId", name, price, type, time from item where id=$1`)
+	if err != nil {
+		return response, err
 	}
 	defer stmtItem.Close()
 
 	stmtChildren, err := db.Prepare(`select id from item where ("parentId"=$1 and type=$2)`)
 	if err != nil {
-		return res, err
+		return response, err
 	}
 	defer stmtChildren.Close()
 
 	head := &nodeItem{}
 
-	if err = stmtItem.QueryRow(id).Scan(head.id, head.parentId, head.name, head.price, head.price); err != nil {
-		return res, err
+	if err = stmtItem.QueryRow(id).Scan(&head.id, &head.parentId,
+		&head.name, &head.price, &head.Type, &head.date); err != nil {
+		return response, err
 	}
 
-	func(parent *nodeItem) {
+	if err = head.fill(stmtChildren, stmtItem); err != nil {
+		return response, err
+	}
 
-	}(head)
-
-	return res, nil
+	response = head.treeToMap()
+	return response, nil
 }
 
 func IsExist(id string) bool {
