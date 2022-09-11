@@ -8,10 +8,10 @@ import (
 
 func main() {
 	port := flag.String("port", "8080", "set server port")
-	login := flag.String("login", "postgres", "database login")
+	user := flag.String("user", "postgres", "database login")
 	password := flag.String("password", "postgres", "database password")
 	flag.Parse()
 
-	data.StartPG(*login, *password)
+	data.StartPG(*user, *password)
 	handler.StartServer(*port)
 }
