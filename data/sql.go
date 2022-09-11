@@ -265,7 +265,7 @@ func ValidateImport(parents, offers, categories map[uuid.NullUUID]bool) bool {
 	return true
 }
 
-func IsExist(id string) bool {
+func isExist(id string) bool {
 	var exist bool
 
 	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
@@ -292,9 +292,10 @@ func Import(request *schemas.ImportRequest) error {
 	}
 
 	stmtHistory, err := tx.Prepare(
-		`insert into price_history select $1, $2, $3 
+		`insert into price_history select $1, $2, $3
 					where not exists(select from price_history
-						where (id=$1 and price=$2) order by time desc limit 1)`)
+         					where (id=$1 and $2=(select price from price_history
+                                      where (id=$1) order by time desc limit 1)))`)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -398,7 +399,7 @@ func Import(request *schemas.ImportRequest) error {
 
 func Delete(id string) error {
 
-	if !IsExist(id) {
+	if !isExist(id) {
 		return errors.New("not found")
 	}
 
@@ -463,7 +464,7 @@ func generatePlaceHolders(size, start int) string {
 func Nodes(id string) (map[string]any, error) {
 	response := map[string]any{}
 
-	if !IsExist(id) {
+	if !isExist(id) {
 		return response, errors.New("not found")
 	}
 
