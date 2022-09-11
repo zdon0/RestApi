@@ -7,7 +7,7 @@ Namely CRUD operations for list of products (online market)
 - **GET** /sales : Present list of items which changed price during specified day in json
 
 ### Libraries
-[gin](https://github.com/gin-gonic/gin) for route operations and validate parameters
+[gin](https://github.com/gin-gonic/gin) for route operations and validate parameters <br />
 [pgx](https://github.com/jackc/pgx) for interaction with PostgreSQL
 
 ### Tables
