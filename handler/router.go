@@ -3,21 +3,26 @@ package handler
 import (
 	"RestApi/data"
 	"RestApi/schemas"
+	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"log"
 	"net/http"
 )
 
-func StartServer() {
+func StartServer(port string) {
 	gin.DisableConsoleColor()
+	gin.SetMode(gin.ReleaseMode)
 	InitValidators()
 
 	r := gin.Default()
+	r.TrustedPlatform = gin.PlatformGoogleAppEngine
 	r.POST("/imports", importRequest)
 	r.DELETE("/delete/:id", deleteRequest)
 	r.GET("/nodes/:id", nodesRequest)
-	log.Fatal(r.Run(":8080"))
-
+	if err := endless.ListenAndServe(":"+port, r); err != nil {
+		log.Println(err)
+	}
+	log.Println("server stopped")
 }
 
 func importRequest(c *gin.Context) {
