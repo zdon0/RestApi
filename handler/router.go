@@ -15,8 +15,9 @@ func StartServer() {
 	r := gin.Default()
 	r.POST("/imports", importRequest)
 	r.DELETE("/delete/:id", deleteRequest)
-	err := r.Run(":8080")
-	log.Fatal(err.Error())
+	r.GET("/nodes/:id", nodesRequest)
+	log.Fatal(r.Run(":8080"))
+
 }
 
 func importRequest(c *gin.Context) {
@@ -31,7 +32,7 @@ func importRequest(c *gin.Context) {
 }
 
 func deleteRequest(c *gin.Context) {
-	var uri schemas.DeleteRequest
+	var uri schemas.IdRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
 
 		c.JSON(http.StatusBadRequest, schemas.BadRequest)
@@ -45,6 +46,26 @@ func deleteRequest(c *gin.Context) {
 
 			log.Println(err)
 			c.Status(http.StatusInternalServerError)
+
+		}
+	}
+}
+
+func nodesRequest(c *gin.Context) {
+	var uri schemas.IdRequest
+
+	if err := c.ShouldBindUri(&uri); err != nil {
+
+		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+
+	} else if res, err := data.Nodes(uri.Id); err != nil {
+		if err.Error() == "not found" {
+
+			c.JSON(http.StatusNotFound, schemas.NotFound)
+
+		} else {
+
+			c.JSON(http.StatusOK, res)
 
 		}
 	}

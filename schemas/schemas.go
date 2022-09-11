@@ -18,7 +18,7 @@ type ImportRequest struct {
 	UpdateDate time.Time    `json:"updateDate" time_format:"2006-01-02T03:04:05.000Z" binding:"required"`
 }
 
-type DeleteRequest struct {
+type IdRequest struct {
 	Id string `uri:"id" binding:"required,uuid_rfc4122"`
 }
 

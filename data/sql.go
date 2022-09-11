@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
+	"strings"
 )
 
 const (
@@ -238,7 +239,6 @@ func Delete(id string) error {
 		for rows.Next() {
 			rows.Scan(&id)
 			queue.PushBack(id)
-			deleteArray = append(deleteArray, id)
 		}
 		if err = rows.Err(); err != nil {
 			stmtFind.Close()
@@ -247,9 +247,17 @@ func Delete(id string) error {
 		rows.Close()
 	}
 
-	if _, err = db.Exec(
-		`delete from item where (id in ($1) or "parentId" in ($1))`, deleteArray...); err != nil {
+	holdersArray := make([]string, len(deleteArray))
+	for i := 1; i <= len(holdersArray); i++ {
+		holdersArray[i-1] = fmt.Sprintf("$%d", i)
+	}
 
+	placeHolders := strings.Join(holdersArray, ",")
+
+	query := fmt.Sprintf(`delete from item where (id in (%s) or "parentId" in (%s))`,
+		placeHolders, placeHolders)
+
+	if _, err = db.Exec(query, deleteArray...); err != nil {
 		stmtFind.Close()
 		return err
 	}
@@ -258,11 +266,51 @@ func Delete(id string) error {
 	return tx.Commit()
 }
 
+type nodeItem struct {
+	id       string
+	parentId sql.NullString
+	name     string
+	price    sql.NullInt64
+	Type     string
+
+	sum      int
+	len      int
+	parent   *nodeItem
+	children []*nodeItem
+}
+
+func Nodes(id string) (map[any]any, error) {
+	res := map[any]any{}
+	stmtItem, err := db.Prepare(`select id, "parentId", name, price, type from item where id=$1`)
+	if err != nil {
+		return res, err
+	}
+	defer stmtItem.Close()
+
+	stmtChildren, err := db.Prepare(`select id from item where ("parentId"=$1 and type=$2)`)
+	if err != nil {
+		return res, err
+	}
+	defer stmtChildren.Close()
+
+	head := &nodeItem{}
+
+	if err = stmtItem.QueryRow(id).Scan(head.id, head.parentId, head.name, head.price, head.price); err != nil {
+		return res, err
+	}
+
+	func(parent *nodeItem) {
+
+	}(head)
+
+	return res, nil
+}
+
 func IsExist(id string) bool {
 	var exist bool
 
 	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
-		return exist
+		return false
 	}
-	return false
+	return exist
 }
