@@ -2,7 +2,7 @@ package main
 
 import (
 	"RestApi/data"
-	"RestApi/handler"
+	"RestApi/router"
 	"flag"
 )
 
@@ -13,5 +13,5 @@ func main() {
 	flag.Parse()
 
 	data.StartPG(*user, *password)
-	handler.StartServer(*port)
+	router.StartServer(*port)
 }
