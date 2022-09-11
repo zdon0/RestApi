@@ -184,7 +184,6 @@ func fixMissed() {
 	if err = rows.Err(); err != nil {
 		log.Fatal(err)
 	}
-	rows.Close()
 
 	if !tables["item"] {
 		_, err = db.Exec(
@@ -378,7 +377,6 @@ func Import(request *schemas.ImportRequest) error {
 			return rows.Err()
 		}
 
-		rows.Close()
 	}
 
 	if len(updateArray) > 0 {
@@ -436,7 +434,6 @@ func Delete(id string) error {
 			stmtFind.Close()
 			return err
 		}
-		rows.Close()
 	}
 
 	placeHolders := generatePlaceHolders(len(deleteArray), 0)
@@ -506,7 +503,6 @@ func Sales(target time.Time) (map[string][]map[string]any, error) {
 	if err != nil {
 		return map[string][]map[string]any{}, err
 	}
-	defer rows.Close()
 
 	for rows.Next() {
 
