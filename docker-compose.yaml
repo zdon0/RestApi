@@ -1,0 +1,18 @@
+services:
+  database:
+    image:
+      postgres
+    environment:
+      - POSTGRES_USER=${USER}
+      - POSTGRES_PASSWORD=${PASSWORD}
+    volumes:
+      - /db:/var/lib/postgresql/data
+  restapi:
+    build: .
+    environment:
+      - PG_USER=${USER}
+      - PG_PASSWORD=${PASSWORD}
+    ports:
+      - ${PORT}:8080
+    links:
+      - database
