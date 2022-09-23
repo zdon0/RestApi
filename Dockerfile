@@ -6,7 +6,7 @@ WORKDIR /go/RestApi
 
 COPY . .
 
-RUN go build -o rest
+RUN go build -tags=jsoniter -o rest
 
 FROM alpine
 

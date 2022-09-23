@@ -1,3 +1,6 @@
+volumes:
+  db-data:
+
 services:
   database:
     container_name: postgres
@@ -9,7 +12,7 @@ services:
       - POSTGRES_PASSWORD=${PASSWORD}
       - TZ=Europe/Moscow
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 3s
