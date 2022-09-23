@@ -7,21 +7,11 @@ import (
 )
 
 func main() {
-	var port, user, password string
-	var exist bool
+	var user, password string
 
-	if port, exist = os.LookupEnv("PORT"); !exist {
-		port = "8080"
-	}
-
-	if user, exist = os.LookupEnv("PG_USER"); !exist {
-		user = "postgres"
-	}
-
-	if password, exist = os.LookupEnv("PG_PASSWORD"); !exist {
-		password = "postgres"
-	}
+	user = os.Getenv("PG_USER")
+	password = os.Getenv("PG_PASSWORD")
 
 	data.StartPG(user, password)
-	router.StartServer(port)
+	router.StartServer()
 }

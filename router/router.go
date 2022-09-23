@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-func StartServer(port string) {
+func StartServer() {
 	gin.DisableConsoleColor()
 	gin.SetMode(gin.ReleaseMode)
 	InitValidators()
@@ -20,7 +20,7 @@ func StartServer(port string) {
 	r.DELETE("/delete/:id", deleteRequest)
 	r.GET("/nodes/:id", nodesRequest)
 	r.GET("/sales", salesRequest)
-	if err := endless.ListenAndServe(":"+port, r); err != nil {
+	if err := endless.ListenAndServe(":8080", r); err != nil {
 		log.Println(err)
 	}
 	log.Println("server stopped")

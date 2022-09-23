@@ -9,6 +9,7 @@ import (
 	"github.com/gofrs/uuid"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
+	"os"
 	"strings"
 	"time"
 )
@@ -22,7 +23,8 @@ var db *sql.DB
 
 func StartPG(user, password string) {
 	var err error
-	db, err = sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@localhost:5432", user, password))
+	db, err = sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@database:5432/postgres?sslmode=disable",
+		user, password, os.Getenv("DATABASE")))
 	if err != nil {
 		log.Fatal(err)
 	}
