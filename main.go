@@ -3,15 +3,25 @@ package main
 import (
 	"RestApi/data"
 	"RestApi/router"
-	"flag"
+	"os"
 )
 
 func main() {
-	port := flag.String("port", "8080", "set server port")
-	user := flag.String("user", "postgres", "database login")
-	password := flag.String("password", "postgres", "database password")
-	flag.Parse()
+	var port, user, password string
+	var exist bool
 
-	data.StartPG(*user, *password)
-	router.StartServer(*port)
+	if port, exist = os.LookupEnv("PORT"); !exist {
+		port = "8080"
+	}
+
+	if user, exist = os.LookupEnv("PG_USER"); !exist {
+		user = "postgres"
+	}
+
+	if password, exist = os.LookupEnv("PG_PASSWORD"); !exist {
+		password = "postgres"
+	}
+
+	data.StartPG(user, password)
+	router.StartServer(port)
 }
