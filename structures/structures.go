@@ -1,4 +1,4 @@
-package schemas
+package structures
 
 import (
 	"github.com/gofrs/uuid"

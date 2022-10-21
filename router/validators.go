@@ -2,7 +2,7 @@ package router
 
 import (
 	"RestApi/data"
-	"RestApi/schemas"
+	"RestApi/structures"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofrs/uuid"
@@ -21,7 +21,7 @@ func validateParentsTypes(fl validator.FieldLevel) bool {
 	offers := map[uuid.NullUUID]bool{}
 	parents := map[uuid.NullUUID]bool{}
 
-	for _, item := range fl.Field().Interface().([]schemas.ImportUnit) {
+	for _, item := range fl.Field().Interface().([]structures.ImportUnit) {
 		if item.Type == "CATEGORY" {
 			categories[item.Id] = true
 		}

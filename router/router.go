@@ -2,7 +2,7 @@ package router
 
 import (
 	"RestApi/data"
-	"RestApi/schemas"
+	"RestApi/structures"
 	"github.com/fvbock/endless"
 	"github.com/gin-gonic/gin"
 	"log"
@@ -27,11 +27,11 @@ func StartServer() {
 }
 
 func importRequest(c *gin.Context) {
-	json := &schemas.ImportRequest{}
+	json := &structures.ImportRequest{}
 
 	if err := c.ShouldBindJSON(json); err != nil {
 
-		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+		c.JSON(http.StatusBadRequest, structures.BadRequest)
 
 	} else if err = data.Import(json); err != nil {
 
@@ -42,15 +42,15 @@ func importRequest(c *gin.Context) {
 }
 
 func deleteRequest(c *gin.Context) {
-	var uri schemas.IdRequest
+	var uri structures.IdRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
 
-		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+		c.JSON(http.StatusBadRequest, structures.BadRequest)
 
 	} else if err = data.Delete(uri.Id); err != nil {
 		if err.Error() == "not found" {
 
-			c.JSON(http.StatusNotFound, schemas.NotFound)
+			c.JSON(http.StatusNotFound, structures.NotFound)
 
 		} else {
 
@@ -62,17 +62,17 @@ func deleteRequest(c *gin.Context) {
 }
 
 func nodesRequest(c *gin.Context) {
-	var uri schemas.IdRequest
+	var uri structures.IdRequest
 
 	if err := c.ShouldBindUri(&uri); err != nil {
 
-		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+		c.JSON(http.StatusBadRequest, structures.BadRequest)
 
 	} else if res, err := data.Nodes(uri.Id); err != nil {
 
 		if err.Error() == "not found" {
 
-			c.JSON(http.StatusNotFound, schemas.NotFound)
+			c.JSON(http.StatusNotFound, structures.NotFound)
 
 		} else {
 			log.Println(err)
@@ -85,10 +85,10 @@ func nodesRequest(c *gin.Context) {
 }
 
 func salesRequest(c *gin.Context) {
-	var date schemas.SalesRequest
+	var date structures.SalesRequest
 
 	if err := c.ShouldBind(&date); err != nil {
-		c.JSON(http.StatusBadRequest, schemas.BadRequest)
+		c.JSON(http.StatusBadRequest, structures.BadRequest)
 	} else if res, err := data.Sales(date.Date); err != nil {
 		log.Println(err)
 		c.Status(http.StatusInternalServerError)

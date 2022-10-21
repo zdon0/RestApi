@@ -6,15 +6,12 @@ import (
 )
 
 type nodeItem struct {
-	id       string
-	parentId sql.NullString
-	name     string
-	price    sql.NullInt64
-	Type     string
-	date     time.Time
+	id, name, Type string
+	parentId       sql.NullString
+	price          sql.NullInt64
+	date           time.Time
 
-	sum      int64
-	len      int64
+	sum, len int64
 	parent   *nodeItem
 	children []*nodeItem
 }
@@ -32,10 +29,10 @@ func (n *nodeItem) treeToMap() map[string]any {
 		res["parentId"] = nil
 	}
 
-	if res["type"] == "OFFER" {
+	if res["type"] == offerStr {
 		res["price"] = n.price.Int64
 		res["children"] = nil
-	} else if res["type"] == "CATEGORY" {
+	} else if res["type"] == categoryStr {
 		if n.len != 0 {
 			res["price"] = n.sum / n.len
 		} else {
@@ -51,7 +48,7 @@ func (n *nodeItem) treeToMap() map[string]any {
 }
 
 func (n *nodeItem) fill(stmtChildren, stmtItem *sql.Stmt) error {
-	childrenOffer, err := stmtChildren.Query(n.id, "OFFER")
+	childrenOffer, err := stmtChildren.Query(n.id, offerStr)
 	if err != nil {
 		return err
 	}
@@ -90,7 +87,7 @@ func (n *nodeItem) fill(stmtChildren, stmtItem *sql.Stmt) error {
 		increasePriceParent = increasePriceParent.parent
 	}
 
-	childrenCategory, err := stmtChildren.Query(n.id, "CATEGORY")
+	childrenCategory, err := stmtChildren.Query(n.id, categoryStr)
 	if err != nil {
 		return err
 	}
