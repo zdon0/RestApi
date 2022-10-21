@@ -4,13 +4,18 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 )
 
 var db *sql.DB
 
-func StartPG(user, password string) {
+func StartPG() {
 	var err error
+
+	user := os.Getenv("PG_USER")
+	password := os.Getenv("PG_PASSWORD")
+
 	db, err = sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@database:5432/postgres?sslmode=disable",
 		user, password))
 	if err != nil {
