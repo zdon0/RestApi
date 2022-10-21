@@ -1,15 +1,13 @@
 package data
 
 import (
-	"RestApi/schemas"
+	"RestApi/structures"
 	"container/list"
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/gofrs/uuid"
 	_ "github.com/jackc/pgx/v4/stdlib"
 	"log"
-	"strings"
 	"time"
 )
 
@@ -18,146 +16,7 @@ const (
 	offerStr    = "OFFER"
 )
 
-var db *sql.DB
-
-func StartPG(user, password string) {
-	var err error
-	db, err = sql.Open("pgx", fmt.Sprintf("postgres://%s:%s@database:5432/postgres?sslmode=disable",
-		user, password))
-	if err != nil {
-		log.Fatal(err)
-	}
-	fixMissed()
-}
-
-func fixMissed() {
-	var err error
-
-	var enumExist bool
-	err = db.QueryRow(
-		`select exists(select from pg_enum 
-                       where enumlabel in ('OFFER', 'CATEGORY'))`).Scan(&enumExist)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if !enumExist {
-		_, err = db.Exec(`create type type as enum ('OFFER', 'CATEGORY')`)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	tables := map[string]bool{}
-	rows, err := db.Query(
-		`SELECT tablename FROM pg_catalog.pg_tables 
-                 	WHERE schemaname != 'pg_catalog' 
-                 		AND schemaname != 'information_schema'`)
-	if err != nil {
-		log.Fatal(err)
-	}
-	for rows.Next() {
-		var table string
-		err = rows.Scan(&table)
-		if err != nil {
-			log.Fatal(err)
-		} else {
-			tables[table] = true
-		}
-	}
-
-	if err = rows.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	if !tables["item"] {
-		_, err = db.Exec(
-			`create table item
-                 (
-                     id         uuid    not null
-                         constraint "itemId"
-                             primary key,
-                     "parentId" uuid,
-                     name       varchar not null,
-                     price      integer,
-                     type       varchar not null,
-                     time		timestamp not null
-                 );`)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	if !tables["price_history"] {
-		_, err = db.Exec(
-			`create table price_history
-				(
-					id         uuid not null
-						constraint "historyId"
-            			references item (id)
-            			on delete cascade,
-					price      integer,
-					time timestamp not null
-				);`)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-}
-
-func ValidateImport(parents, offers, categories map[uuid.NullUUID]bool) bool {
-	stmt, err := db.Prepare("select exists(select from item where (id=$1 and type=$2))")
-	if err != nil {
-		log.Println(err)
-		return false
-	}
-	defer stmt.Close()
-
-	for parent := range parents {
-		var res bool
-		err = stmt.QueryRow(parent, "CATEGORY").Scan(&res)
-		if !res {
-			return false
-		} else if err != nil {
-			log.Println(err)
-			return false
-		}
-	}
-
-	for offer := range offers {
-		var res bool
-		err = stmt.QueryRow(offer, "CATEGORY").Scan(&res)
-		if res {
-			return false
-		} else if err != nil {
-			log.Println(err)
-			return false
-		}
-	}
-
-	for category := range categories {
-		var res bool
-		err = stmt.QueryRow(category, "OFFER").Scan(&res)
-		if res {
-			return false
-		} else if err != nil {
-			log.Println(err)
-			return false
-		}
-	}
-
-	return true
-}
-
-func isExist(id string) bool {
-	var exist bool
-
-	if err := db.QueryRow(`select exists(select from item where id=$1)`, id).Scan(&exist); err != nil {
-		return false
-	}
-	return exist
-}
-
-func Import(request *schemas.ImportRequest) error {
+func Import(request *structures.ImportRequest) error {
 	tx, err := db.Begin()
 	if err != nil {
 		log.Println(err)
@@ -175,10 +34,11 @@ func Import(request *schemas.ImportRequest) error {
 	}
 
 	stmtHistory, err := tx.Prepare(
-		`insert into price_history select $1, $2, $3
-					where not exists(select from price_history
-         					where (id=$1 and $2=(select price from price_history
-                                      where (id=$1) order by time desc limit 1)))`)
+		`insert into price_history select $1, $2, $3 
+                    where not exists(select where
+                        $2=(select price from price_history 
+                            where (id=$1) order by time desc limit 1))`)
+
 	if err != nil {
 		log.Println(err)
 		return err
@@ -214,7 +74,7 @@ func Import(request *schemas.ImportRequest) error {
 			return err
 		}
 
-		if Type == "OFFER" {
+		if Type == offerStr {
 			if _, err = stmtHistory.Exec(id, price, request.UpdateDate); err != nil {
 				log.Println(err)
 				closeStatements()
@@ -334,14 +194,6 @@ func Delete(id string) error {
 	return tx.Commit()
 }
 
-func generatePlaceHolders(size, start int) string {
-	holdersArray := make([]string, size)
-	for i := 1; i <= size; i++ {
-		holdersArray[i-1] = fmt.Sprintf("$%d", i+start)
-	}
-	return strings.Join(holdersArray, ",")
-}
-
 func Nodes(id string) (map[string]any, error) {
 	response := map[string]any{}
 
@@ -379,9 +231,9 @@ func Nodes(id string) (map[string]any, error) {
 func Sales(target time.Time) (map[string][]map[string]any, error) {
 	response := map[string][]map[string]any{"items": {}}
 	dayAgo := target.Add(-24 * time.Hour)
-	rows, err := db.Query(`select distinct i.* from item i 
-    								join price_history p on i.id = p.id 
-                    					where (p.time >= $1 and p.time <= $2)`,
+	rows, err := db.Query(`select * from item
+        							 		where id in (select distinct id from price_history
+                                         						where "time" between $1 and $2)`,
 		dayAgo, target)
 
 	if err != nil {
